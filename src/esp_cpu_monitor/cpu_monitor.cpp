@@ -397,7 +397,7 @@ bool ESPCpuMonitor::initTemperatureSensor() {
         return false;
     }
     return true;
-#elif ESPCM_HAS_TEMP_SENSOR_OLD
+#elif ESPCM_TEMP_SENSOR_AVAILABLE && ESPCM_HAS_TEMP_SENSOR_OLD
     temp_sensor_config_t cfg = TSENS_CONFIG_DEFAULT();
     esp_err_t err = temp_sensor_set_config(cfg);
     if (err != ESP_OK) {

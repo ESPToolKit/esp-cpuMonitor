@@ -36,12 +36,19 @@ extern "C" {
 #include <esp_freertos_hooks.h>
 
 #if defined(__has_include)
+#if defined(ARDUINO)
+#if __has_include(<driver/temp_sensor.h>)
+#define ESPCM_HAS_TEMP_SENSOR_OLD 1
+#include <driver/temp_sensor.h>
+#endif  // Arduino prefers legacy temp_sensor driver; skip new driver to avoid missing symbols
+#else
 #if __has_include(<driver/temperature_sensor.h>)
 #define ESPCM_HAS_TEMP_SENSOR_NEW 1
 #include <driver/temperature_sensor.h>
 #elif __has_include(<driver/temp_sensor.h>)
 #define ESPCM_HAS_TEMP_SENSOR_OLD 1
 #include <driver/temp_sensor.h>
+#endif
 #endif
 #endif
 

@@ -372,11 +372,16 @@ void ESPCpuMonitor::toJson(const CpuUsageSample &sample, JsonDocument &doc) cons
 
 bool ESPCpuMonitor::initTemperatureSensor() {
 #if ESPCM_HAS_TEMP_SENSOR_NEW
-    temperature_sensor_config_t cfg =
-#ifdef TEMPERATURE_SENSOR_CONFIG_DEFAULT
-        TEMPERATURE_SENSOR_CONFIG_DEFAULT(-10, 80);
+    temperature_sensor_config_t cfg{};
+#if defined(TEMPERATURE_SENSOR_CONFIG_DEFAULT) && defined(TEMPERATURE_SENSOR_CLK_SRC_DEFAULT)
+    cfg = TEMPERATURE_SENSOR_CONFIG_DEFAULT(-10, 80);
+#elif defined(TEMPERATURE_SENSOR_CONFIG_DEFAULT)
+    // Some Arduino ESP32 builds expose the macro but not the clock source enum; set only the range.
+    cfg.range_min = -10;
+    cfg.range_max = 80;
 #else
-        temperature_sensor_config_t{.range_min = -10, .range_max = 80, .clk_src = TEMPERATURE_SENSOR_CLK_SRC_DEFAULT};
+    cfg.range_min = -10;
+    cfg.range_max = 80;
 #endif
     esp_err_t err = temperature_sensor_install(&cfg, &tempSensor_);
     if (err != ESP_OK) {

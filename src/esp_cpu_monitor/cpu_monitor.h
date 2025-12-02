@@ -1,0 +1,104 @@
+#pragma once
+
+#if defined(ARDUINO)
+#include <Arduino.h>
+#elif defined(__has_include)
+#if __has_include(<Arduino.h>)
+#include <Arduino.h>
+#endif
+#endif
+
+#if defined(__has_include)
+#if __has_include(<ArduinoJson.h>)
+#include <ArduinoJson.h>
+#define ESPCM_HAS_ARDUINOJSON 1
+#endif
+#endif
+
+#ifndef ESPCM_HAS_ARDUINOJSON
+#define ESPCM_HAS_ARDUINOJSON 0
+#endif
+
+#include <array>
+#include <cstdint>
+#include <deque>
+#include <functional>
+#include <vector>
+
+extern "C" {
+#include <freertos/FreeRTOS.h>
+#include <freertos/semphr.h>
+#include <freertos/task.h>
+}
+
+#include <esp_timer.h>
+#include <esp_freertos_hooks.h>
+
+struct CpuMonitorConfig {
+    uint32_t sampleIntervalMs = 1000;   // Periodic sampling interval (0 = manual only)
+    uint32_t calibrationSamples = 5;    // Baseline windows that represent 100% idle
+    size_t historySize = 60;            // Ring buffer depth (0 = disable history)
+    bool enablePerCore = true;          // When false, only average is reported
+};
+
+struct CpuUsageSample {
+    uint64_t timestampUs = 0;
+    float perCore[portNUM_PROCESSORS]{};
+    float average = 0.0f;
+};
+
+using CpuSampleCallback = std::function<void(const CpuUsageSample&)>;
+
+class ESPCpuMonitor {
+public:
+    ESPCpuMonitor();
+    ~ESPCpuMonitor();
+
+    bool init(const CpuMonitorConfig &cfg = {});
+    void deinit();
+
+    bool isReady() const;
+    bool getLastSample(CpuUsageSample &out) const;
+    float getLastAverage() const;
+    std::vector<CpuUsageSample> history() const;
+
+    // Trigger sampling immediately (useful when sampleIntervalMs == 0)
+    bool sampleNow(CpuUsageSample &out);
+
+    void onSample(CpuSampleCallback cb);
+
+#if ESPCM_HAS_ARDUINOJSON
+    void toJson(const CpuUsageSample &sample, JsonDocument &doc) const;
+#endif
+
+private:
+    static bool IRAM_ATTR idleHookCore0();
+#if portNUM_PROCESSORS > 1
+    static bool IRAM_ATTR idleHookCore1();
+#endif
+    static void timerCallback(void *arg);
+
+    void resetState(const CpuMonitorConfig &cfg);
+    bool computeSampleLocked(CpuUsageSample &out);
+    bool captureSample(CpuUsageSample &out, std::vector<CpuSampleCallback> &callbacksCopy);
+    void lock() const;
+    void unlock() const;
+
+    static volatile uint64_t s_idleCount[portNUM_PROCESSORS];
+    static ESPCpuMonitor *s_instance;
+
+    CpuMonitorConfig config_{};
+    uint64_t prevIdle_[portNUM_PROCESSORS];
+    float idleBaseline_[portNUM_PROCESSORS];
+    CpuUsageSample lastSample_{};
+    bool hasSample_ = false;
+    bool calibrated_ = false;
+    uint32_t calibrationSamplesNeeded_ = 0;
+    uint32_t calibrationSamplesDone_ = 0;
+    esp_timer_handle_t timer_ = nullptr;
+    mutable SemaphoreHandle_t mutex_ = nullptr;
+    std::deque<CpuUsageSample> history_;
+    std::vector<CpuSampleCallback> callbacks_;
+};
+
+extern ESPCpuMonitor cpuMonitor;

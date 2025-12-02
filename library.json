@@ -1,0 +1,38 @@
+{
+  "name": "ESPCpuMonitor",
+  "version": "0.1.0",
+  "description": "Per-core CPU usage sampling for ESP32 using FreeRTOS idle hooks and esp_timer",
+  "keywords": [
+    "esp32",
+    "arduino",
+    "cpu",
+    "usage",
+    "monitor",
+    "freertos"
+  ],
+  "homepage": "https://github.com/ESPToolKit/esp-cpuMonitor",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ESPToolKit/esp-cpuMonitor.git"
+  },
+  "license": "MIT",
+  "authors": [
+    {
+      "name": "zekageri"
+    }
+  ],
+  "frameworks": ["arduino"],
+  "platforms": ["espressif32"],
+  "dependencies": [
+    {
+      "name": "ArduinoJson",
+      "version": "^7.0.0"
+    }
+  ],
+  "headers": ["ESPCpuMonitor.h"],
+  "build": {
+    "flags": [
+      "-std=gnu++17"
+    ]
+  }
+}

@@ -52,6 +52,22 @@ extern "C" {
 #endif
 #endif
 
+#if defined(__has_include)
+#if __has_include(<soc/soc_caps.h>)
+#include <soc/soc_caps.h>
+#endif
+#endif
+
+#ifndef SOC_TEMP_SENSOR_SUPPORTED
+#define SOC_TEMP_SENSOR_SUPPORTED 0
+#endif
+
+#if (SOC_TEMP_SENSOR_SUPPORTED) && (ESPCM_HAS_TEMP_SENSOR_NEW || ESPCM_HAS_TEMP_SENSOR_OLD)
+#define ESPCM_TEMP_SENSOR_AVAILABLE 1
+#else
+#define ESPCM_TEMP_SENSOR_AVAILABLE 0
+#endif
+
 #ifndef ESPCM_HAS_TEMP_SENSOR_NEW
 #define ESPCM_HAS_TEMP_SENSOR_NEW 0
 #endif

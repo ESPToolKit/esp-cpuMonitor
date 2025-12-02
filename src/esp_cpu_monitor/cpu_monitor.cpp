@@ -371,7 +371,7 @@ void ESPCpuMonitor::toJson(const CpuUsageSample &sample, JsonDocument &doc) cons
 #endif
 
 bool ESPCpuMonitor::initTemperatureSensor() {
-#if ESPCM_HAS_TEMP_SENSOR_NEW
+#if ESPCM_TEMP_SENSOR_AVAILABLE && ESPCM_HAS_TEMP_SENSOR_NEW
     temperature_sensor_config_t cfg{};
 #if defined(TEMPERATURE_SENSOR_CONFIG_DEFAULT) && defined(TEMPERATURE_SENSOR_CLK_SRC_DEFAULT)
     cfg = TEMPERATURE_SENSOR_CONFIG_DEFAULT(-10, 80);
@@ -411,19 +411,19 @@ bool ESPCpuMonitor::initTemperatureSensor() {
     }
     tempSensorStarted_ = true;
     return true;
-#else
+#else  // ESPCM_TEMP_SENSOR_AVAILABLE && ESPCM_HAS_TEMP_SENSOR_NEW
     return false;
 #endif
 }
 
 void ESPCpuMonitor::deinitTemperatureSensor() {
-#if ESPCM_HAS_TEMP_SENSOR_NEW
+#if ESPCM_TEMP_SENSOR_AVAILABLE && ESPCM_HAS_TEMP_SENSOR_NEW
     if (tempSensor_) {
         temperature_sensor_disable(tempSensor_);
         temperature_sensor_uninstall(tempSensor_);
         tempSensor_ = nullptr;
     }
-#elif ESPCM_HAS_TEMP_SENSOR_OLD
+#elif ESPCM_TEMP_SENSOR_AVAILABLE && ESPCM_HAS_TEMP_SENSOR_OLD
     if (tempSensorStarted_) {
         temp_sensor_stop();
         tempSensorStarted_ = false;
@@ -437,7 +437,7 @@ bool ESPCpuMonitor::readTemperature(float &outC) {
     if (!config_.enableTemperature || !temperatureEnabled_) {
         return false;
     }
-#if ESPCM_HAS_TEMP_SENSOR_NEW
+#if ESPCM_TEMP_SENSOR_AVAILABLE && ESPCM_HAS_TEMP_SENSOR_NEW
     if (!tempSensor_) {
         return false;
     }
@@ -446,7 +446,7 @@ bool ESPCpuMonitor::readTemperature(float &outC) {
         outC = val;
         return true;
     }
-#elif ESPCM_HAS_TEMP_SENSOR_OLD
+#elif ESPCM_TEMP_SENSOR_AVAILABLE && ESPCM_HAS_TEMP_SENSOR_OLD
     float val = 0.0f;
     if (temp_sensor_read_celsius(&val) == ESP_OK) {
         outC = val;

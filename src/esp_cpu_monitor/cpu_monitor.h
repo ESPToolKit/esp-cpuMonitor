@@ -23,6 +23,7 @@
 #include <cstdint>
 #include <deque>
 #include <functional>
+#include <limits>
 #include <vector>
 
 extern "C" {
@@ -34,17 +35,38 @@ extern "C" {
 #include <esp_timer.h>
 #include <esp_freertos_hooks.h>
 
+#if defined(__has_include)
+#if __has_include(<driver/temperature_sensor.h>)
+#define ESPCM_HAS_TEMP_SENSOR_NEW 1
+#include <driver/temperature_sensor.h>
+#elif __has_include(<driver/temp_sensor.h>)
+#define ESPCM_HAS_TEMP_SENSOR_OLD 1
+#include <driver/temp_sensor.h>
+#endif
+#endif
+
+#ifndef ESPCM_HAS_TEMP_SENSOR_NEW
+#define ESPCM_HAS_TEMP_SENSOR_NEW 0
+#endif
+
+#ifndef ESPCM_HAS_TEMP_SENSOR_OLD
+#define ESPCM_HAS_TEMP_SENSOR_OLD 0
+#endif
+
 struct CpuMonitorConfig {
     uint32_t sampleIntervalMs = 1000;   // Periodic sampling interval (0 = manual only)
     uint32_t calibrationSamples = 5;    // Baseline windows that represent 100% idle
     size_t historySize = 60;            // Ring buffer depth (0 = disable history)
     bool enablePerCore = true;          // When false, only average is reported
+    bool enableTemperature = true;      // When false, skip temperature readings
 };
 
 struct CpuUsageSample {
     uint64_t timestampUs = 0;
     float perCore[portNUM_PROCESSORS]{};
     float average = 0.0f;
+    float temperatureC = std::numeric_limits<float>::quiet_NaN();
+    float temperatureAvgC = std::numeric_limits<float>::quiet_NaN();
 };
 
 using CpuSampleCallback = std::function<void(const CpuUsageSample&)>;
@@ -60,6 +82,7 @@ public:
     bool isReady() const;
     bool getLastSample(CpuUsageSample &out) const;
     float getLastAverage() const;
+    bool getLastTemperature(float &currentC, float &averageC) const;
     std::vector<CpuUsageSample> history() const;
 
     // Trigger sampling immediately (useful when sampleIntervalMs == 0)
@@ -81,6 +104,10 @@ private:
     void resetState(const CpuMonitorConfig &cfg);
     bool computeSampleLocked(CpuUsageSample &out);
     bool captureSample(CpuUsageSample &out, std::vector<CpuSampleCallback> &callbacksCopy);
+    bool initTemperatureSensor();
+    void deinitTemperatureSensor();
+    bool readTemperature(float &outC);
+    void resetTemperatureState();
     void lock() const;
     void unlock() const;
 
@@ -99,6 +126,15 @@ private:
     mutable SemaphoreHandle_t mutex_ = nullptr;
     std::deque<CpuUsageSample> history_;
     std::vector<CpuSampleCallback> callbacks_;
+    float lastTemperature_ = std::numeric_limits<float>::quiet_NaN();
+    float temperatureAvg_ = std::numeric_limits<float>::quiet_NaN();
+    uint32_t temperatureSamples_ = 0;
+    bool temperatureEnabled_ = false;
+#if ESPCM_HAS_TEMP_SENSOR_NEW
+    temperature_sensor_handle_t tempSensor_ = nullptr;
+#elif ESPCM_HAS_TEMP_SENSOR_OLD
+    bool tempSensorStarted_ = false;
+#endif
 };
 
 extern ESPCpuMonitor cpuMonitor;

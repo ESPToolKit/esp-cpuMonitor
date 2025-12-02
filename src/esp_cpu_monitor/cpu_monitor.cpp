@@ -1,6 +1,7 @@
 #include "cpu_monitor.h"
 
 #include <esp_log.h>
+#include <cmath>
 
 static const char *TAG = "ESPCpuMonitor";
 
@@ -24,6 +25,13 @@ void ESPCpuMonitor::resetState(const CpuMonitorConfig &cfg) {
     hasSample_ = false;
     calibrated_ = false;
     history_.clear();
+    resetTemperatureState();
+    temperatureEnabled_ = false;
+#if ESPCM_HAS_TEMP_SENSOR_NEW
+    tempSensor_ = nullptr;
+#elif ESPCM_HAS_TEMP_SENSOR_OLD
+    tempSensorStarted_ = false;
+#endif
 
     for (int i = 0; i < portNUM_PROCESSORS; ++i) {
         prevIdle_[i] = 0;
@@ -32,6 +40,8 @@ void ESPCpuMonitor::resetState(const CpuMonitorConfig &cfg) {
         s_idleCount[i] = 0;
     }
     lastSample_.average = 0.0f;
+    lastSample_.temperatureC = std::numeric_limits<float>::quiet_NaN();
+    lastSample_.temperatureAvgC = std::numeric_limits<float>::quiet_NaN();
 }
 
 void ESPCpuMonitor::lock() const {
@@ -115,6 +125,13 @@ bool ESPCpuMonitor::init(const CpuMonitorConfig &cfg) {
         }
     }
 
+    if (config_.enableTemperature) {
+        temperatureEnabled_ = initTemperatureSensor();
+        if (!temperatureEnabled_) {
+            ESP_LOGW(TAG, "CPU temperature sensor unavailable; temperature readings disabled");
+        }
+    }
+
     ESP_LOGI(TAG, "ESPCpuMonitor started (period=%ums, calibration=%u)",
              config_.sampleIntervalMs, calibrationSamplesNeeded_);
     return true;
@@ -126,6 +143,8 @@ void ESPCpuMonitor::deinit() {
         esp_timer_delete(timer_);
         timer_ = nullptr;
     }
+
+    deinitTemperatureSensor();
 
 #if portNUM_PROCESSORS == 1
     esp_deregister_freertos_idle_hook(&ESPCpuMonitor::idleHookCore0);
@@ -168,6 +187,22 @@ float ESPCpuMonitor::getLastAverage() const {
         return sample.average;
     }
     return -1.0f;
+}
+
+bool ESPCpuMonitor::getLastTemperature(float &currentC, float &averageC) const {
+    if (!config_.enableTemperature) {
+        return false;
+    }
+    CpuUsageSample sample{};
+    if (!getLastSample(sample)) {
+        return false;
+    }
+    if (std::isnan(sample.temperatureC) || std::isnan(sample.temperatureAvgC)) {
+        return false;
+    }
+    currentC = sample.temperatureC;
+    averageC = sample.temperatureAvgC;
+    return true;
 }
 
 std::vector<CpuUsageSample> ESPCpuMonitor::history() const {
@@ -297,6 +332,24 @@ bool ESPCpuMonitor::computeSampleLocked(CpuUsageSample &out) {
         out.perCore[i] = config_.enablePerCore ? perCoreUsage[i] : avg;
     }
     out.average = avg;
+
+    float temperature = std::numeric_limits<float>::quiet_NaN();
+    float temperatureAvg = std::numeric_limits<float>::quiet_NaN();
+    if (readTemperature(temperature)) {
+        if (temperatureSamples_ == 0) {
+            temperatureAvg_ = temperature;
+        } else {
+            temperatureAvg_ += (temperature - temperatureAvg_) / static_cast<float>(temperatureSamples_ + 1);
+        }
+        temperatureSamples_++;
+        lastTemperature_ = temperature;
+        temperatureAvg = temperatureAvg_;
+    } else if (temperatureSamples_ > 0) {
+        temperatureAvg = temperatureAvg_;
+        temperature = lastTemperature_;
+    }
+    out.temperatureC = temperature;
+    out.temperatureAvgC = temperatureAvg;
     return true;
 }
 
@@ -308,5 +361,98 @@ void ESPCpuMonitor::toJson(const CpuUsageSample &sample, JsonDocument &doc) cons
         coreArr.add(sample.perCore[i]);
     }
     doc["avg"] = sample.average;
+    if (!std::isnan(sample.temperatureC)) {
+        doc["temp"] = sample.temperatureC;
+    }
+    if (!std::isnan(sample.temperatureAvgC)) {
+        doc["tempAvg"] = sample.temperatureAvgC;
+    }
 }
 #endif
+
+bool ESPCpuMonitor::initTemperatureSensor() {
+#if ESPCM_HAS_TEMP_SENSOR_NEW
+    temperature_sensor_config_t cfg =
+#ifdef TEMPERATURE_SENSOR_CONFIG_DEFAULT
+        TEMPERATURE_SENSOR_CONFIG_DEFAULT(-10, 80);
+#else
+        temperature_sensor_config_t{.range_min = -10, .range_max = 80, .clk_src = TEMPERATURE_SENSOR_CLK_SRC_DEFAULT};
+#endif
+    esp_err_t err = temperature_sensor_install(&cfg, &tempSensor_);
+    if (err != ESP_OK) {
+        ESP_LOGW(TAG, "temperature_sensor_install failed: %d", static_cast<int>(err));
+        tempSensor_ = nullptr;
+        return false;
+    }
+    err = temperature_sensor_enable(tempSensor_);
+    if (err != ESP_OK) {
+        ESP_LOGW(TAG, "temperature_sensor_enable failed: %d", static_cast<int>(err));
+        temperature_sensor_uninstall(tempSensor_);
+        tempSensor_ = nullptr;
+        return false;
+    }
+    return true;
+#elif ESPCM_HAS_TEMP_SENSOR_OLD
+    temp_sensor_config_t cfg = TSENS_CONFIG_DEFAULT();
+    esp_err_t err = temp_sensor_set_config(cfg);
+    if (err != ESP_OK) {
+        ESP_LOGW(TAG, "temp_sensor_set_config failed: %d", static_cast<int>(err));
+        return false;
+    }
+    err = temp_sensor_start();
+    if (err != ESP_OK) {
+        ESP_LOGW(TAG, "temp_sensor_start failed: %d", static_cast<int>(err));
+        return false;
+    }
+    tempSensorStarted_ = true;
+    return true;
+#else
+    return false;
+#endif
+}
+
+void ESPCpuMonitor::deinitTemperatureSensor() {
+#if ESPCM_HAS_TEMP_SENSOR_NEW
+    if (tempSensor_) {
+        temperature_sensor_disable(tempSensor_);
+        temperature_sensor_uninstall(tempSensor_);
+        tempSensor_ = nullptr;
+    }
+#elif ESPCM_HAS_TEMP_SENSOR_OLD
+    if (tempSensorStarted_) {
+        temp_sensor_stop();
+        tempSensorStarted_ = false;
+    }
+#endif
+    temperatureEnabled_ = false;
+    resetTemperatureState();
+}
+
+bool ESPCpuMonitor::readTemperature(float &outC) {
+    if (!config_.enableTemperature || !temperatureEnabled_) {
+        return false;
+    }
+#if ESPCM_HAS_TEMP_SENSOR_NEW
+    if (!tempSensor_) {
+        return false;
+    }
+    float val = 0.0f;
+    if (temperature_sensor_get_celsius(tempSensor_, &val) == ESP_OK) {
+        outC = val;
+        return true;
+    }
+#elif ESPCM_HAS_TEMP_SENSOR_OLD
+    float val = 0.0f;
+    if (temp_sensor_read_celsius(&val) == ESP_OK) {
+        outC = val;
+        return true;
+    }
+#endif
+    return false;
+}
+
+void ESPCpuMonitor::resetTemperatureState() {
+    lastTemperature_ = std::numeric_limits<float>::quiet_NaN();
+    temperatureAvg_ = std::numeric_limits<float>::quiet_NaN();
+    temperatureSamples_ = 0;
+}

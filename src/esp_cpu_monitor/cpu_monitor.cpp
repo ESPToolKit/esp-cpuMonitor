@@ -2,6 +2,7 @@
 
 #include <esp_log.h>
 #include <cmath>
+#include <type_traits>
 
 static const char *TAG = "ESPCpuMonitor";
 
@@ -16,6 +17,26 @@ ESPCpuMonitor::ESPCpuMonitor() {
 
 ESPCpuMonitor::~ESPCpuMonitor() {
     deinit();
+}
+
+template <typename TResult>
+static bool idleHookRegisteredSuccessfully(const TResult &res) {
+#if defined(ESP_OK)
+    if constexpr (std::is_same<TResult, esp_err_t>::value) {
+        return res == ESP_OK;
+    }
+#endif
+    return static_cast<bool>(res);
+}
+
+template <typename TResult>
+static int idleHookErrorCode(const TResult &res) {
+#if defined(ESP_OK)
+    if constexpr (std::is_same<TResult, esp_err_t>::value) {
+        return static_cast<int>(res);
+    }
+#endif
+    return static_cast<bool>(res) ? 0 : -1;
 }
 
 void ESPCpuMonitor::resetState(const CpuMonitorConfig &cfg) {
@@ -76,24 +97,27 @@ bool ESPCpuMonitor::init(const CpuMonitorConfig &cfg) {
     bool hook1 = false;
 
 #if portNUM_PROCESSORS == 1
-    hook0 = esp_register_freertos_idle_hook(&ESPCpuMonitor::idleHookCore0);
+    const auto res0 = esp_register_freertos_idle_hook(&ESPCpuMonitor::idleHookCore0);
+    hook0 = idleHookRegisteredSuccessfully(res0);
     if (!hook0) {
-        ESP_LOGE(TAG, "Failed to register idle hook for core0");
+        ESP_LOGE(TAG, "Failed to register idle hook for core0 (err=%d)", idleHookErrorCode(res0));
         vSemaphoreDelete(mutex_);
         mutex_ = nullptr;
         return false;
     }
 #else
-    hook0 = esp_register_freertos_idle_hook_for_cpu(&ESPCpuMonitor::idleHookCore0, 0);
+    const auto res0 = esp_register_freertos_idle_hook_for_cpu(&ESPCpuMonitor::idleHookCore0, 0);
+    hook0 = idleHookRegisteredSuccessfully(res0);
     if (!hook0) {
-        ESP_LOGE(TAG, "Failed to register idle hook for core0");
+        ESP_LOGE(TAG, "Failed to register idle hook for core0 (err=%d)", idleHookErrorCode(res0));
         vSemaphoreDelete(mutex_);
         mutex_ = nullptr;
         return false;
     }
-    hook1 = esp_register_freertos_idle_hook_for_cpu(&ESPCpuMonitor::idleHookCore1, 1);
+    const auto res1 = esp_register_freertos_idle_hook_for_cpu(&ESPCpuMonitor::idleHookCore1, 1);
+    hook1 = idleHookRegisteredSuccessfully(res1);
     if (!hook1) {
-        ESP_LOGE(TAG, "Failed to register idle hook for core1");
+        ESP_LOGE(TAG, "Failed to register idle hook for core1 (err=%d)", idleHookErrorCode(res1));
         esp_deregister_freertos_idle_hook_for_cpu(&ESPCpuMonitor::idleHookCore0, 0);
         vSemaphoreDelete(mutex_);
         mutex_ = nullptr;

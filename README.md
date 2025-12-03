@@ -16,6 +16,10 @@ ESPCpuMonitor is a tiny C++17 helper that estimates per-core CPU usage on ESP32 
 - Optional ArduinoJson export helper to stream samples over HTTP/MQTT/WebSockets alongside the rest of ESPToolKit.
 
 ## Examples
+- `examples/basic_monitor` – timer-driven sampling with per-core logs and optional temperature readings.
+- `examples/manual_sampling` – drives `sampleNow()` manually (no esp_timer), shows how to log history depth and keep calibration/averaging stable during bursty work.
+- `examples/json_export` – streams newline-delimited JSON via `toJson()` + ArduinoJson for dashboards/MQTT/serial telemetry.
+
 Basic Arduino sketch that prints CPU usage once calibrated:
 
 ```cpp
@@ -89,7 +93,7 @@ If temperature is enabled, `getLastTemperature(current, average)` returns the la
 - C++17 required; tested with dual-core chips but handles `portNUM_PROCESSORS == 1`.
 
 ## Tests
-- Build and run `examples/basic_monitor` via PlatformIO CI or Arduino CLI for a quick smoke test on ESP32 dev boards.
+- Build and run `examples/basic_monitor`, `examples/manual_sampling`, and `examples/json_export` via PlatformIO CI or Arduino CLI for a quick smoke test on ESP32 dev boards.
 
 ## License
 MIT — see [LICENSE.md](LICENSE.md).

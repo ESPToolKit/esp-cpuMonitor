@@ -3,7 +3,9 @@
 All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
-- No changes yet.
+### Added
+- `examples/manual_sampling` shows manual `sampleNow()` usage without the esp_timer while keeping calibration/history stable.
+- `examples/json_export` streams newline-delimited JSON via `toJson()` + ArduinoJson for telemetry pipelines.
 
 ## [1.0.1] - 2025-12-03
 ### Fixed

@@ -35,12 +35,13 @@ extern "C" {
 #include <esp_timer.h>
 #include <esp_freertos_hooks.h>
 
+// Prefer the new temperature sensor driver when available; consumers can force the legacy driver if needed.
 #if defined(__has_include)
-#if defined(ARDUINO)
+#if defined(ESPCM_FORCE_LEGACY_TEMP_SENSOR)
 #if __has_include(<driver/temp_sensor.h>)
 #define ESPCM_HAS_TEMP_SENSOR_OLD 1
 #include <driver/temp_sensor.h>
-#endif  // Arduino prefers legacy temp_sensor driver; skip new driver to avoid missing symbols
+#endif
 #else
 #if __has_include(<driver/temperature_sensor.h>)
 #define ESPCM_HAS_TEMP_SENSOR_NEW 1

@@ -58,6 +58,7 @@ When you set `sampleIntervalMs` to `0`, call `cpuMonitor.sampleNow(sample)` from
 If temperature is enabled, `getLastTemperature(current, average)` returns the latest reading and running mean (returns `false` when unsupported or not ready).
 
 ## Gotchas
+- CPU usage numbers are floats in percent so you can see tiny changes; `1.0` means ~1% busy, not 100%. Feel free to round (`%.0f%%`) in your logs/UI if you prefer whole numbers.
 - Allow the calibration window (`calibrationSamples`) to finish before trusting numbers; keep the device as idle as possible during that phase.
 - Idle hooks do not run in deep sleep or while interrupts lock out FreeRTOS; readings simply pause in those periods.
 - If you disable per-core reporting, each entry in `perCore` mirrors the averaged usage for consistency.

@@ -1,6 +1,6 @@
 {
   "name": "ESPCpuMonitor",
-  "version": "0.1.0",
+  "version": "1.0.1",
   "description": "Per-core CPU usage sampling for ESP32 using FreeRTOS idle hooks and esp_timer",
   "keywords": [
     "esp32",

@@ -3,6 +3,7 @@
 #include <esp_log.h>
 
 static const uint32_t SAMPLE_PERIOD_MS = 500;
+ESPCpuMonitor cpuMonitor;
 
 // Simple spin to create a small CPU bump for the manual sampler.
 static void spinWork(uint32_t durationMicros) {

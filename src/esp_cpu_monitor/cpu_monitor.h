@@ -100,6 +100,11 @@ public:
     ESPCpuMonitor();
     ~ESPCpuMonitor();
 
+    ESPCpuMonitor(const ESPCpuMonitor&) = delete;
+    ESPCpuMonitor& operator=(const ESPCpuMonitor&) = delete;
+    ESPCpuMonitor(ESPCpuMonitor&&) = delete;
+    ESPCpuMonitor& operator=(ESPCpuMonitor&&) = delete;
+
     bool init(const CpuMonitorConfig &cfg = {});
     void deinit();
 
@@ -160,5 +165,3 @@ private:
     bool tempSensorStarted_ = false;
 #endif
 };
-
-extern ESPCpuMonitor cpuMonitor;

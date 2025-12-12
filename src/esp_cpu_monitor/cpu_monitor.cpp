@@ -9,8 +9,6 @@ static const char *TAG = "ESPCpuMonitor";
 volatile uint64_t ESPCpuMonitor::s_idleCount[portNUM_PROCESSORS] = {};
 ESPCpuMonitor *ESPCpuMonitor::s_instance = nullptr;
 
-ESPCpuMonitor cpuMonitor;
-
 ESPCpuMonitor::ESPCpuMonitor() {
     resetState(CpuMonitorConfig{});
 }
@@ -162,6 +160,10 @@ bool ESPCpuMonitor::init(const CpuMonitorConfig &cfg) {
 }
 
 void ESPCpuMonitor::deinit() {
+    if (s_instance != this) {
+        return;
+    }
+
     if (timer_) {
         esp_timer_stop(timer_);
         esp_timer_delete(timer_);

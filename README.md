@@ -20,6 +20,8 @@ ESPCpuMonitor is a tiny C++17 helper that estimates per-core CPU usage on ESP32 
 - `examples/manual_sampling` – drives `sampleNow()` manually (no esp_timer), shows how to log history depth and keep calibration/averaging stable during bursty work.
 - `examples/json_export` – streams newline-delimited JSON via `toJson()` + ArduinoJson for dashboards/MQTT/serial telemetry.
 
+Create your own `ESPCpuMonitor` instance; the library no longer exposes a built-in global, and only one monitor can be active because idle hooks are shared.
+
 Basic Arduino sketch that prints CPU usage once calibrated:
 
 ```cpp
@@ -27,6 +29,8 @@ Basic Arduino sketch that prints CPU usage once calibrated:
 #include <ESPCpuMonitor.h>
 #include <esp_log.h>
 #include <cmath>
+
+ESPCpuMonitor cpuMonitor; // user-owned instance (only one active at a time)
 
 void setup() {
     Serial.begin(115200);
@@ -58,7 +62,7 @@ void loop() {
 }
 ```
 
-When you set `sampleIntervalMs` to `0`, call `cpuMonitor.sampleNow(sample)` from your scheduler to drive sampling manually (useful in tight control loops).
+When you set `sampleIntervalMs` to `0`, call `sampleNow()` on your monitor instance (for example, `cpuMonitor.sampleNow(sample)`) from your scheduler to drive sampling manually.
 If temperature is enabled, `getLastTemperature(current, average)` returns the latest reading and running mean (returns `false` when unsupported or not ready).
 
 ## Gotchas

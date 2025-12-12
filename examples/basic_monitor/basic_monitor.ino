@@ -3,6 +3,8 @@
 #include <esp_log.h>
 #include <cmath>
 
+ESPCpuMonitor cpuMonitor;
+
 void setup() {
     Serial.begin(115200);
 

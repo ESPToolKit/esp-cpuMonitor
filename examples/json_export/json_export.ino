@@ -1,6 +1,8 @@
 #include <Arduino.h>
 #include <ESPCpuMonitor.h>
 
+ESPCpuMonitor cpuMonitor;
+
 #if !ESPCM_HAS_ARDUINOJSON
 #error "Install ArduinoJson to run this example."
 #endif

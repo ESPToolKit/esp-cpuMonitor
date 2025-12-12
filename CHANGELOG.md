@@ -7,6 +7,10 @@ All notable changes to this project will be documented in this file.
 - `examples/manual_sampling` shows manual `sampleNow()` usage without the esp_timer while keeping calibration/history stable.
 - `examples/json_export` streams newline-delimited JSON via `toJson()` + ArduinoJson for telemetry pipelines.
 
+### Changed
+- Removed the library-provided global `cpuMonitor`; create and manage your own `ESPCpuMonitor` instance (only one active monitor at a time) and updated examples/docs accordingly.
+- Made `ESPCpuMonitor` non-copyable/movable to prevent accidental double-free of FreeRTOS handles.
+
 ## [1.0.1] - 2025-12-03
 ### Fixed
 - Idle hook registration now handles the newer IDF/Arduino APIs that return `esp_err_t`, preventing false failures on startup.

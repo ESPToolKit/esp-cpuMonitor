@@ -20,7 +20,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.x'
+          python-version: '3.13'
 
       - name: Cache PlatformIO
         uses: actions/cache@v4
@@ -32,6 +32,9 @@ jobs:
 
       - name: Install PIOArduino Core
         run: python -m pip install --upgrade https://github.com/pioarduino/platformio-core/archive/refs/tags/v6.1.18.zip
+
+      - name: Install PIOArduino ESP32 Platform
+        run: pio platform install https://github.com/pioarduino/platform-espressif32.git
 
       - name: Build library examples (ESP32 Arduino)
         run: |

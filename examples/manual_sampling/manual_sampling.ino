@@ -22,11 +22,14 @@ void setup() {
     cfg.historySize = 10;
     cfg.enablePerCore = false;     // focus on averaged load
     cfg.enableTemperature = false; // keep it portable on targets without temp sensor
+    cfg.smoothingMode = CpuSmoothingMode::RollingMean;
+    cfg.smoothingWindow = 6;
     cpuMonitor.init(cfg);
 
     cpuMonitor.onSample([](const CpuUsageSample &sample) {
-        ESP_LOGI("CPU", "avg=%.1f%% ts=%llu",
+        ESP_LOGI("CPU", "avg=%.1f%% smoothed=%.1f%% ts=%llu",
                  sample.average,
+                 sample.smoothedAverage,
                  static_cast<unsigned long long>(sample.timestampUs));
     });
 }
@@ -48,8 +51,9 @@ void loop() {
         if (!ready) {
             Serial.println("[manual_sampling] calibrating baseline...");
         } else {
-            Serial.printf("[manual_sampling] avg=%.1f%% history_depth=%u\n",
+            Serial.printf("[manual_sampling] avg=%.1f%% smoothed=%.1f%% history_depth=%u\n",
                           sample.average,
+                          sample.smoothedAverage,
                           static_cast<unsigned>(cpuMonitor.history().size()));
         }
     }

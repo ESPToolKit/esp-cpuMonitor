@@ -6,10 +6,13 @@ All notable changes to this project will be documented in this file.
 ### Added
 - `examples/manual_sampling` shows manual `sampleNow()` usage without the esp_timer while keeping calibration/history stable.
 - `examples/json_export` streams newline-delimited JSON via `toJson()` + ArduinoJson for telemetry pipelines.
+- Optional average smoothing in `CpuUsageSample` via `smoothedAverage`, with configurable `smoothingMode` (`None`, `RollingMean`, `Ewma`), rolling window size, and EWMA alpha.
+- `getLastSmoothedAverage()` helper for quickly reading the latest trend/baseline value when smoothing is enabled.
 
 ### Changed
 - Removed the library-provided global `cpuMonitor`; create and manage your own `ESPCpuMonitor` instance (only one active monitor at a time) and updated examples/docs accordingly.
 - Made `ESPCpuMonitor` non-copyable/movable to prevent accidental double-free of FreeRTOS handles.
+- `toJson()` now exports `avgSmoothed` when smoothing is enabled and a smoothed sample is available.
 
 ## [1.0.1] - 2025-12-03
 ### Fixed

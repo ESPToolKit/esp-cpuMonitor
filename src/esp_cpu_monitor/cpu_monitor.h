@@ -77,18 +77,33 @@ extern "C" {
 #define ESPCM_HAS_TEMP_SENSOR_OLD 0
 #endif
 
+// Upper bound to keep rolling-mean smoothing allocation free.
+#ifndef ESPCM_MAX_SMOOTHING_WINDOW
+#define ESPCM_MAX_SMOOTHING_WINDOW 32
+#endif
+
+enum class CpuSmoothingMode : uint8_t {
+    None = 0,
+    RollingMean = 1,
+    Ewma = 2,
+};
+
 struct CpuMonitorConfig {
     uint32_t sampleIntervalMs = 1000;   // Periodic sampling interval (0 = manual only)
     uint32_t calibrationSamples = 5;    // Baseline windows that represent 100% idle
     size_t historySize = 60;            // Ring buffer depth (0 = disable history)
     bool enablePerCore = true;          // When false, only average is reported
     bool enableTemperature = true;      // When false, skip temperature readings
+    CpuSmoothingMode smoothingMode = CpuSmoothingMode::None; // Optional average smoothing
+    uint8_t smoothingWindow = 5;        // Rolling mean window (1..ESPCM_MAX_SMOOTHING_WINDOW)
+    float smoothingAlpha = 0.2f;        // EWMA alpha (0.0, 1.0]
 };
 
 struct CpuUsageSample {
     uint64_t timestampUs = 0;
     float perCore[portNUM_PROCESSORS]{};
     float average = 0.0f;
+    float smoothedAverage = std::numeric_limits<float>::quiet_NaN();
     float temperatureC = std::numeric_limits<float>::quiet_NaN();
     float temperatureAvgC = std::numeric_limits<float>::quiet_NaN();
 };
@@ -111,6 +126,7 @@ public:
     bool isReady() const;
     bool getLastSample(CpuUsageSample &out) const;
     float getLastAverage() const;
+    float getLastSmoothedAverage() const;
     bool getLastTemperature(float &currentC, float &averageC) const;
     std::vector<CpuUsageSample> history() const;
 
@@ -136,6 +152,8 @@ private:
     bool initTemperatureSensor();
     void deinitTemperatureSensor();
     bool readTemperature(float &outC);
+    void resetSmoothingState();
+    float computeSmoothedAverage(float rawAverage);
     void resetTemperatureState();
     void lock() const;
     void unlock() const;
@@ -155,6 +173,12 @@ private:
     mutable SemaphoreHandle_t mutex_ = nullptr;
     std::deque<CpuUsageSample> history_;
     std::vector<CpuSampleCallback> callbacks_;
+    std::array<float, ESPCM_MAX_SMOOTHING_WINDOW> smoothingWindowValues_{};
+    uint8_t smoothingWindowSize_ = 1;
+    uint8_t smoothingCount_ = 0;
+    uint8_t smoothingIndex_ = 0;
+    float smoothingSum_ = 0.0f;
+    float ewmaState_ = std::numeric_limits<float>::quiet_NaN();
     float lastTemperature_ = std::numeric_limits<float>::quiet_NaN();
     float temperatureAvg_ = std::numeric_limits<float>::quiet_NaN();
     uint32_t temperatureSamples_ = 0;

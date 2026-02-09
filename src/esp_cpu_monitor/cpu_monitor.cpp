@@ -37,13 +37,32 @@ static int idleHookErrorCode(const TResult &res) {
     return static_cast<bool>(res) ? 0 : -1;
 }
 
+static bool isValidSmoothingMode(CpuSmoothingMode mode) {
+    return mode == CpuSmoothingMode::None
+        || mode == CpuSmoothingMode::RollingMean
+        || mode == CpuSmoothingMode::Ewma;
+}
+
 void ESPCpuMonitor::resetState(const CpuMonitorConfig &cfg) {
     config_ = cfg;
+    if (!isValidSmoothingMode(config_.smoothingMode)) {
+        config_.smoothingMode = CpuSmoothingMode::None;
+    }
+    if (config_.smoothingWindow == 0) {
+        config_.smoothingWindow = 1;
+    }
+    if (config_.smoothingWindow > ESPCM_MAX_SMOOTHING_WINDOW) {
+        config_.smoothingWindow = ESPCM_MAX_SMOOTHING_WINDOW;
+    }
+    if (!(config_.smoothingAlpha > 0.0f && config_.smoothingAlpha <= 1.0f)) {
+        config_.smoothingAlpha = 0.2f;
+    }
     calibrationSamplesNeeded_ = config_.calibrationSamples == 0 ? 1 : config_.calibrationSamples;
     calibrationSamplesDone_ = 0;
     hasSample_ = false;
     calibrated_ = false;
     history_.clear();
+    resetSmoothingState();
     resetTemperatureState();
     temperatureEnabled_ = false;
 #if ESPCM_HAS_TEMP_SENSOR_NEW
@@ -59,6 +78,7 @@ void ESPCpuMonitor::resetState(const CpuMonitorConfig &cfg) {
         s_idleCount[i] = 0;
     }
     lastSample_.average = 0.0f;
+    lastSample_.smoothedAverage = std::numeric_limits<float>::quiet_NaN();
     lastSample_.temperatureC = std::numeric_limits<float>::quiet_NaN();
     lastSample_.temperatureAvgC = std::numeric_limits<float>::quiet_NaN();
 }
@@ -215,6 +235,14 @@ float ESPCpuMonitor::getLastAverage() const {
     return -1.0f;
 }
 
+float ESPCpuMonitor::getLastSmoothedAverage() const {
+    CpuUsageSample sample{};
+    if (getLastSample(sample) && !std::isnan(sample.smoothedAverage)) {
+        return sample.smoothedAverage;
+    }
+    return -1.0f;
+}
+
 bool ESPCpuMonitor::getLastTemperature(float &currentC, float &averageC) const {
     if (!config_.enableTemperature) {
         return false;
@@ -358,6 +386,7 @@ bool ESPCpuMonitor::computeSampleLocked(CpuUsageSample &out) {
         out.perCore[i] = config_.enablePerCore ? perCoreUsage[i] : avg;
     }
     out.average = avg;
+    out.smoothedAverage = computeSmoothedAverage(avg);
 
     float temperature = std::numeric_limits<float>::quiet_NaN();
     float temperatureAvg = std::numeric_limits<float>::quiet_NaN();
@@ -387,6 +416,9 @@ void ESPCpuMonitor::toJson(const CpuUsageSample &sample, JsonDocument &doc) cons
         coreArr.add(sample.perCore[i]);
     }
     doc["avg"] = sample.average;
+    if (!std::isnan(sample.smoothedAverage)) {
+        doc["avgSmoothed"] = sample.smoothedAverage;
+    }
     if (!std::isnan(sample.temperatureC)) {
         doc["temp"] = sample.temperatureC;
     }
@@ -480,6 +512,44 @@ bool ESPCpuMonitor::readTemperature(float &outC) {
     }
 #endif
     return false;
+}
+
+void ESPCpuMonitor::resetSmoothingState() {
+    smoothingWindowValues_.fill(0.0f);
+    smoothingWindowSize_ = config_.smoothingWindow;
+    if (smoothingWindowSize_ == 0) {
+        smoothingWindowSize_ = 1;
+    }
+    smoothingCount_ = 0;
+    smoothingIndex_ = 0;
+    smoothingSum_ = 0.0f;
+    ewmaState_ = std::numeric_limits<float>::quiet_NaN();
+}
+
+float ESPCpuMonitor::computeSmoothedAverage(float rawAverage) {
+    if (config_.smoothingMode == CpuSmoothingMode::None) {
+        return std::numeric_limits<float>::quiet_NaN();
+    }
+
+    if (config_.smoothingMode == CpuSmoothingMode::RollingMean) {
+        if (smoothingCount_ < smoothingWindowSize_) {
+            smoothingCount_++;
+        } else {
+            smoothingSum_ -= smoothingWindowValues_[smoothingIndex_];
+        }
+
+        smoothingWindowValues_[smoothingIndex_] = rawAverage;
+        smoothingSum_ += rawAverage;
+        smoothingIndex_ = static_cast<uint8_t>((smoothingIndex_ + 1) % smoothingWindowSize_);
+        return smoothingSum_ / static_cast<float>(smoothingCount_);
+    }
+
+    if (std::isnan(ewmaState_)) {
+        ewmaState_ = rawAverage;
+    } else {
+        ewmaState_ += config_.smoothingAlpha * (rawAverage - ewmaState_);
+    }
+    return ewmaState_;
 }
 
 void ESPCpuMonitor::resetTemperatureState() {

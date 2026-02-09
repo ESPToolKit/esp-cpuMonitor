@@ -19,6 +19,8 @@ void setup() {
     cfg.sampleIntervalMs = 1000; // 1s cadence for telemetry
     cfg.historySize = 12;        // keep a handful of points for charts/debug
     cfg.enableTemperature = true;
+    cfg.smoothingMode = CpuSmoothingMode::Ewma;
+    cfg.smoothingAlpha = 0.2f;
     cpuMonitor.init(cfg);
 
     cpuMonitor.onSample([](const CpuUsageSample &sample) {
@@ -39,9 +41,10 @@ void loop() {
         const auto hist = cpuMonitor.history();
         if (!hist.empty()) {
             const auto &latest = hist.back();
-            Serial.printf("[json_export] history_depth=%u last_avg=%.1f%% last_temp=%.1fC\n",
+            Serial.printf("[json_export] history_depth=%u last_avg=%.1f%% last_smoothed=%.1f%% last_temp=%.1fC\n",
                           static_cast<unsigned>(hist.size()),
                           latest.average,
+                          std::isnan(latest.smoothedAverage) ? -1.0f : latest.smoothedAverage,
                           std::isnan(latest.temperatureC) ? -1.0f : latest.temperatureC);
         }
     }

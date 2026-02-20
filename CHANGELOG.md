@@ -8,6 +8,7 @@ All notable changes to this project will be documented in this file.
 - `examples/json_export` streams newline-delimited JSON via `toJson()` + ArduinoJson for telemetry pipelines.
 - Optional average smoothing in `CpuUsageSample` via `smoothedAverage`, with configurable `smoothingMode` (`None`, `RollingMean`, `Ewma`), rolling window size, and EWMA alpha.
 - `getLastSmoothedAverage()` helper for quickly reading the latest trend/baseline value when smoothing is enabled.
+- `CpuMonitorConfig::usePSRAMBuffers` toggle to prefer PSRAM-backed internal history and callback container/snapshot storage through `ESPBufferManager`, with automatic fallback to normal heap.
 
 ### Changed
 - Removed the library-provided global `cpuMonitor`; create and manage your own `ESPCpuMonitor` instance (only one active monitor at a time) and updated examples/docs accordingly.

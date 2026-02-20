@@ -61,7 +61,8 @@ void ESPCpuMonitor::resetState(const CpuMonitorConfig &cfg) {
     calibrationSamplesDone_ = 0;
     hasSample_ = false;
     calibrated_ = false;
-    history_.clear();
+    history_ = CpuMonitorDeque<CpuUsageSample>(CpuMonitorAllocator<CpuUsageSample>(config_.usePSRAMBuffers));
+    callbacks_ = CpuMonitorVector<CpuSampleCallback>(CpuMonitorAllocator<CpuSampleCallback>(config_.usePSRAMBuffers));
     resetSmoothingState();
     resetTemperatureState();
     temperatureEnabled_ = false;
@@ -272,7 +273,7 @@ bool ESPCpuMonitor::sampleNow(CpuUsageSample &out) {
         return false;
     }
 
-    std::vector<CpuSampleCallback> callbacks;
+    CpuMonitorVector<CpuSampleCallback> callbacks{CpuMonitorAllocator<CpuSampleCallback>(config_.usePSRAMBuffers)};
     bool ready = captureSample(out, callbacks);
     for (const auto &cb : callbacks) {
         if (cb) {
@@ -309,7 +310,7 @@ void ESPCpuMonitor::timerCallback(void *arg) {
         return;
     }
     CpuUsageSample sample{};
-    std::vector<CpuSampleCallback> callbacks;
+    CpuMonitorVector<CpuSampleCallback> callbacks{CpuMonitorAllocator<CpuSampleCallback>(self->config_.usePSRAMBuffers)};
     if (self->captureSample(sample, callbacks)) {
         for (const auto &cb : callbacks) {
             if (cb) {
@@ -319,7 +320,7 @@ void ESPCpuMonitor::timerCallback(void *arg) {
     }
 }
 
-bool ESPCpuMonitor::captureSample(CpuUsageSample &out, std::vector<CpuSampleCallback> &callbacksCopy) {
+bool ESPCpuMonitor::captureSample(CpuUsageSample &out, CpuMonitorVector<CpuSampleCallback> &callbacksCopy) {
     bool ready = false;
     lock();
     ready = computeSampleLocked(out);

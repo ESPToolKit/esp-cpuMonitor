@@ -21,10 +21,11 @@
 
 #include <array>
 #include <cstdint>
-#include <deque>
 #include <functional>
 #include <limits>
 #include <vector>
+
+#include "cpu_monitor_allocator.h"
 
 extern "C" {
 #include <freertos/FreeRTOS.h>
@@ -92,6 +93,7 @@ struct CpuMonitorConfig {
     uint32_t sampleIntervalMs = 1000;   // Periodic sampling interval (0 = manual only)
     uint32_t calibrationSamples = 5;    // Baseline windows that represent 100% idle
     size_t historySize = 60;            // Ring buffer depth (0 = disable history)
+    bool usePSRAMBuffers = false;       // Prefer PSRAM for internal dynamic buffers when available
     bool enablePerCore = true;          // When false, only average is reported
     bool enableTemperature = true;      // When false, skip temperature readings
     CpuSmoothingMode smoothingMode = CpuSmoothingMode::None; // Optional average smoothing
@@ -148,7 +150,7 @@ private:
 
     void resetState(const CpuMonitorConfig &cfg);
     bool computeSampleLocked(CpuUsageSample &out);
-    bool captureSample(CpuUsageSample &out, std::vector<CpuSampleCallback> &callbacksCopy);
+    bool captureSample(CpuUsageSample &out, CpuMonitorVector<CpuSampleCallback> &callbacksCopy);
     bool initTemperatureSensor();
     void deinitTemperatureSensor();
     bool readTemperature(float &outC);
@@ -171,8 +173,8 @@ private:
     uint32_t calibrationSamplesDone_ = 0;
     esp_timer_handle_t timer_ = nullptr;
     mutable SemaphoreHandle_t mutex_ = nullptr;
-    std::deque<CpuUsageSample> history_;
-    std::vector<CpuSampleCallback> callbacks_;
+    CpuMonitorDeque<CpuUsageSample> history_;
+    CpuMonitorVector<CpuSampleCallback> callbacks_;
     std::array<float, ESPCM_MAX_SMOOTHING_WINDOW> smoothingWindowValues_{};
     uint8_t smoothingWindowSize_ = 1;
     uint8_t smoothingCount_ = 0;

@@ -10,6 +10,7 @@ ESPCpuMonitor is a tiny C++17 helper that estimates per-core CPU usage on ESP32 
 ## Features
 - FreeRTOS idle-hook based sampling with esp_timer; configurable period and calibration window so you can balance responsiveness vs. noise.
 - Per-core and averaged CPU usage (%) with timestamps from `esp_timer_get_time`, plus a ring-buffer history (default 60 entries) for charts/debug.
+- Optional PSRAM-backed internal buffering via `usePSRAMBuffers` (history + callback storage/snapshots, best effort with safe fallback when PSRAM is unavailable).
 - Optional smoothing helpers for average CPU usage (`RollingMean` or `EWMA`) so you can track baseline/trend load without forcing smoothing globally (disabled by default, fixed-size buffer when enabled).
 - Thread-safe per-sample callbacks for logging, telemetry, or UI updates; swap `enablePerCore` off to collapse cores to an overall average.
 - Manual `sampleNow()` path for users who already have their own schedulers (set `sampleIntervalMs` to `0`).
@@ -40,6 +41,7 @@ void setup() {
     cfg.sampleIntervalMs = 1000;   // 1s cadence
     cfg.calibrationSamples = 5;    // treat first 5 periods as "100% idle" baseline
     cfg.historySize = 30;
+    cfg.usePSRAMBuffers = true;    // optional: prefer PSRAM for internal buffers (history + callback storage/snapshots)
     cfg.enableTemperature = true;  // disable if your target lacks a temp sensor
     cfg.smoothingMode = CpuSmoothingMode::Ewma;
     cfg.smoothingAlpha = 0.25f;    // smaller alpha = smoother trend
@@ -93,6 +95,7 @@ If temperature is enabled, `getLastTemperature(current, average)` returns the la
 - `sampleIntervalMs` (default `1000`) – esp_timer period in milliseconds; `0` skips timer creation.
 - `calibrationSamples` (default `5`) – number of windows to treat as 100% idle baseline.
 - `historySize` (default `60`) – depth of stored samples; set to `0` to disable.
+- `usePSRAMBuffers` (default `false`) – when `true`, CPU monitor prefers PSRAM for internal dynamic buffers (history and callback containers/snapshots) and falls back automatically to normal heap if PSRAM is unavailable.
 - `enablePerCore` (default `true`) – when `false`, every `perCore` entry is set to the averaged usage.
 - `enableTemperature` (default `true`) – enable/disable temperature sensor readings.
 - `smoothingMode` (default `None`) – optional smoothing strategy for `average`: `None`, `RollingMean`, or `Ewma`.

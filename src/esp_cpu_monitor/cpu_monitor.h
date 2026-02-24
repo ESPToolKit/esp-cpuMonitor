@@ -124,6 +124,7 @@ public:
 
     bool init(const CpuMonitorConfig &cfg = {});
     void deinit();
+    bool isInitialized() const { return s_instance == this; }
 
     bool isReady() const;
     bool getLastSample(CpuUsageSample &out) const;

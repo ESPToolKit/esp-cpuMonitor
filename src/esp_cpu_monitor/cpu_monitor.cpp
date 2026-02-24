@@ -209,6 +209,9 @@ void ESPCpuMonitor::deinit() {
     calibrated_ = false;
     hasSample_ = false;
     history_.clear();
+    callbacks_.clear();
+    resetSmoothingState();
+    resetTemperatureState();
 }
 
 bool ESPCpuMonitor::isReady() const {
@@ -268,7 +271,7 @@ std::vector<CpuUsageSample> ESPCpuMonitor::history() const {
 }
 
 bool ESPCpuMonitor::sampleNow(CpuUsageSample &out) {
-    if (s_instance != this) {
+    if (!isInitialized()) {
         ESP_LOGE(TAG, "Call init() before sampleNow()");
         return false;
     }
@@ -306,7 +309,7 @@ bool IRAM_ATTR ESPCpuMonitor::idleHookCore1() {
 
 void ESPCpuMonitor::timerCallback(void *arg) {
     auto *self = static_cast<ESPCpuMonitor *>(arg);
-    if (!self) {
+    if (!self || !self->isInitialized()) {
         return;
     }
     CpuUsageSample sample{};

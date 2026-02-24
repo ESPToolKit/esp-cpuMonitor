@@ -71,6 +71,7 @@ void loop() {
 
 When you set `sampleIntervalMs` to `0`, call `sampleNow()` on your monitor instance (for example, `cpuMonitor.sampleNow(sample)`) from your scheduler to drive sampling manually.
 If temperature is enabled, `getLastTemperature(current, average)` returns the latest reading and running mean (returns `false` when unsupported or not ready).
+When your feature shuts down (task exit, OTA handoff, mode switch), call `cpuMonitor.deinit()` to release idle hooks and timer resources.
 
 ## Gotchas
 - CPU usage numbers are floats in percent so you can see tiny changes; `1.0` means ~1% busy, not 100%. Feel free to round (`%.0f%%`) in your logs/UI if you prefer whole numbers.
@@ -82,7 +83,8 @@ If temperature is enabled, `getLastTemperature(current, average)` returns the la
 - Some ESP32 variants or Arduino builds omit the internal temperature sensor; in that case `temperatureC`/`temperatureAvgC` stay `NaN` and `getLastTemperature` returns `false`.
 
 ## API Reference
-- `bool init(const CpuMonitorConfig &cfg = {})` / `void deinit()` – register idle hooks, create the esp_timer (when `sampleIntervalMs > 0`), and reset state.
+- `bool init(const CpuMonitorConfig &cfg = {})` / `void deinit()` – register idle hooks, create the esp_timer (when `sampleIntervalMs > 0`), and reset state. `deinit()` is safe to call before `init()` and on repeated calls.
+- `bool isInitialized() const` – returns `true` while the monitor owns the shared idle hooks/timer resources.
 - `bool isReady() const` – returns true once calibration completed and a sample is stored.
 - `bool getLastSample(CpuUsageSample &out) const` / `float getLastAverage() const` / `float getLastSmoothedAverage() const` – read the latest sample; average/smoothed values return `-1.0f` until ready (or when smoothing is disabled).
 - `bool getLastTemperature(float &currentC, float &averageC) const` – latest temperature and running average; returns `false` if disabled, unsupported, or not yet sampled.

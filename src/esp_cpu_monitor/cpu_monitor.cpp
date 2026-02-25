@@ -208,8 +208,9 @@ void ESPCpuMonitor::deinit() {
     s_instance = nullptr;
     calibrated_ = false;
     hasSample_ = false;
-    history_.clear();
-    callbacks_.clear();
+    // Swap with fresh empty containers so capacity is released during teardown.
+    CpuMonitorDeque<CpuUsageSample>(CpuMonitorAllocator<CpuUsageSample>(config_.usePSRAMBuffers)).swap(history_);
+    CpuMonitorVector<CpuSampleCallback>(CpuMonitorAllocator<CpuSampleCallback>(config_.usePSRAMBuffers)).swap(callbacks_);
     resetSmoothingState();
     resetTemperatureState();
 }

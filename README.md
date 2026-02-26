@@ -50,16 +50,18 @@ void setup() {
     cpuMonitor.onSample([](const CpuUsageSample &s) {
 #if portNUM_PROCESSORS > 1
         ESP_LOGI("CPU", "core0=%.1f%% core1=%.1f%% avg=%.1f%% smoothed=%.1f%% temp=%.1fC (avg %.1fC)",
-                 s.perCore[0], s.perCore[1], s.average,
-                 std::isnan(s.smoothedAverage) ? -1.0f : s.smoothedAverage,
-                 std::isnan(s.temperatureC) ? -1.0f : s.temperatureC,
-                 std::isnan(s.temperatureAvgC) ? -1.0f : s.temperatureAvgC);
+            s.perCore[0], s.perCore[1], s.average,
+            std::isnan(s.smoothedAverage) ? -1.0f : s.smoothedAverage,
+            std::isnan(s.temperatureC) ? -1.0f : s.temperatureC,
+            std::isnan(s.temperatureAvgC) ? -1.0f : s.temperatureAvgC
+        );
 #else
         ESP_LOGI("CPU", "core0=%.1f%% avg=%.1f%% smoothed=%.1f%% temp=%.1fC (avg %.1fC)",
-                 s.perCore[0], s.average,
-                 std::isnan(s.smoothedAverage) ? -1.0f : s.smoothedAverage,
-                 std::isnan(s.temperatureC) ? -1.0f : s.temperatureC,
-                 std::isnan(s.temperatureAvgC) ? -1.0f : s.temperatureAvgC);
+            s.perCore[0], s.average,
+            std::isnan(s.smoothedAverage) ? -1.0f : s.smoothedAverage,
+            std::isnan(s.temperatureC) ? -1.0f : s.temperatureC,
+            std::isnan(s.temperatureAvgC) ? -1.0f : s.temperatureAvgC
+        );
 #endif
     });
 }

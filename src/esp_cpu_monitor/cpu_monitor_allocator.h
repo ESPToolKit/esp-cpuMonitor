@@ -20,86 +20,84 @@
 namespace cpu_monitor_allocator_detail {
 inline void *allocate(std::size_t bytes, bool usePSRAMBuffers) noexcept {
 #if ESP_CPU_MONITOR_HAS_BUFFER_MANAGER
-    return ESPBufferManager::allocate(bytes, usePSRAMBuffers);
+	return ESPBufferManager::allocate(bytes, usePSRAMBuffers);
 #else
-    (void)usePSRAMBuffers;
-    return std::malloc(bytes);
+	(void)usePSRAMBuffers;
+	return std::malloc(bytes);
 #endif
 }
 
 inline void deallocate(void *ptr) noexcept {
 #if ESP_CPU_MONITOR_HAS_BUFFER_MANAGER
-    ESPBufferManager::deallocate(ptr);
+	ESPBufferManager::deallocate(ptr);
 #else
-    std::free(ptr);
+	std::free(ptr);
 #endif
 }
-}  // namespace cpu_monitor_allocator_detail
+} // namespace cpu_monitor_allocator_detail
 
-template <typename T>
-class CpuMonitorAllocator {
-   public:
-    using value_type = T;
-    using propagate_on_container_copy_assignment = std::true_type;
-    using propagate_on_container_move_assignment = std::true_type;
-    using propagate_on_container_swap = std::true_type;
+template <typename T> class CpuMonitorAllocator {
+  public:
+	using value_type = T;
+	using propagate_on_container_copy_assignment = std::true_type;
+	using propagate_on_container_move_assignment = std::true_type;
+	using propagate_on_container_swap = std::true_type;
 
-    CpuMonitorAllocator() noexcept = default;
-    explicit CpuMonitorAllocator(bool usePSRAMBuffers) noexcept : usePSRAMBuffers_(usePSRAMBuffers) {}
+	CpuMonitorAllocator() noexcept = default;
+	explicit CpuMonitorAllocator(bool usePSRAMBuffers) noexcept
+	    : usePSRAMBuffers_(usePSRAMBuffers) {
+	}
 
-    template <typename U>
-    CpuMonitorAllocator(const CpuMonitorAllocator<U> &other) noexcept : usePSRAMBuffers_(other.usePSRAMBuffers()) {}
+	template <typename U>
+	CpuMonitorAllocator(const CpuMonitorAllocator<U> &other) noexcept
+	    : usePSRAMBuffers_(other.usePSRAMBuffers()) {
+	}
 
-    T *allocate(std::size_t n) {
-        if (n == 0) {
-            return nullptr;
-        }
-        if (n > (std::numeric_limits<std::size_t>::max() / sizeof(T))) {
+	T *allocate(std::size_t n) {
+		if (n == 0) {
+			return nullptr;
+		}
+		if (n > (std::numeric_limits<std::size_t>::max() / sizeof(T))) {
 #if defined(__cpp_exceptions)
-            throw std::bad_alloc();
+			throw std::bad_alloc();
 #else
-            std::abort();
+			std::abort();
 #endif
-        }
+		}
 
-        void *memory = cpu_monitor_allocator_detail::allocate(n * sizeof(T), usePSRAMBuffers_);
-        if (memory == nullptr) {
+		void *memory = cpu_monitor_allocator_detail::allocate(n * sizeof(T), usePSRAMBuffers_);
+		if (memory == nullptr) {
 #if defined(__cpp_exceptions)
-            throw std::bad_alloc();
+			throw std::bad_alloc();
 #else
-            std::abort();
+			std::abort();
 #endif
-        }
-        return static_cast<T *>(memory);
-    }
+		}
+		return static_cast<T *>(memory);
+	}
 
-    void deallocate(T *ptr, std::size_t) noexcept {
-        cpu_monitor_allocator_detail::deallocate(ptr);
-    }
+	void deallocate(T *ptr, std::size_t) noexcept {
+		cpu_monitor_allocator_detail::deallocate(ptr);
+	}
 
-    bool usePSRAMBuffers() const noexcept {
-        return usePSRAMBuffers_;
-    }
+	bool usePSRAMBuffers() const noexcept {
+		return usePSRAMBuffers_;
+	}
 
-    template <typename U>
-    bool operator==(const CpuMonitorAllocator<U> &other) const noexcept {
-        return usePSRAMBuffers_ == other.usePSRAMBuffers();
-    }
+	template <typename U> bool operator==(const CpuMonitorAllocator<U> &other) const noexcept {
+		return usePSRAMBuffers_ == other.usePSRAMBuffers();
+	}
 
-    template <typename U>
-    bool operator!=(const CpuMonitorAllocator<U> &other) const noexcept {
-        return !(*this == other);
-    }
+	template <typename U> bool operator!=(const CpuMonitorAllocator<U> &other) const noexcept {
+		return !(*this == other);
+	}
 
-   private:
-    template <typename>
-    friend class CpuMonitorAllocator;
+  private:
+	template <typename> friend class CpuMonitorAllocator;
 
-    bool usePSRAMBuffers_ = false;
+	bool usePSRAMBuffers_ = false;
 };
 
-template <typename T>
-using CpuMonitorDeque = std::deque<T, CpuMonitorAllocator<T>>;
+template <typename T> using CpuMonitorDeque = std::deque<T, CpuMonitorAllocator<T>>;
 
-template <typename T>
-using CpuMonitorVector = std::vector<T, CpuMonitorAllocator<T>>;
+template <typename T> using CpuMonitorVector = std::vector<T, CpuMonitorAllocator<T>>;

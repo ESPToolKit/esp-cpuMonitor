@@ -115,6 +115,13 @@ When your feature shuts down (task exit, OTA handoff, mode switch), call `cpuMon
 ## Tests
 - Build and run `examples/basic_monitor`, `examples/manual_sampling`, and `examples/json_export` via PlatformIO CI or Arduino CLI for a quick smoke test on ESP32 dev boards.
 
+## Formatting Baseline
+
+This repository follows the firmware formatting baseline from `esptoolkit-template`:
+- `.clang-format` is the source of truth for C/C++/INO layout.
+- `.editorconfig` enforces tabs (`tab_width = 4`), LF endings, and final newline.
+- Format all tracked firmware sources with `bash scripts/format_cpp.sh`.
+
 ## License
 MIT — see [LICENSE.md](LICENSE.md).
 

@@ -40,6 +40,16 @@ static bool isValidSmoothingMode(CpuSmoothingMode mode) {
 	       mode == CpuSmoothingMode::Ewma;
 }
 
+static float clampUsagePercent(float usage) {
+	if (usage < 0.0f) {
+		return 0.0f;
+	}
+	if (usage > 100.0f) {
+		return 100.0f;
+	}
+	return usage;
+}
+
 void ESPCpuMonitor::resetState(const CpuMonitorConfig &cfg) {
 	config_ = cfg;
 	if (!isValidSmoothingMode(config_.smoothingMode)) {
@@ -56,6 +66,8 @@ void ESPCpuMonitor::resetState(const CpuMonitorConfig &cfg) {
 	}
 	calibrationSamplesNeeded_ = config_.calibrationSamples == 0 ? 1 : config_.calibrationSamples;
 	calibrationSamplesDone_ = 0;
+	calibrationWindowUs_ = 0;
+	calibrationLastSampleUs_ = static_cast<uint64_t>(esp_timer_get_time());
 	hasSample_ = false;
 	calibrated_ = false;
 	history_ = CpuMonitorDeque<CpuUsageSample>(
@@ -76,6 +88,8 @@ void ESPCpuMonitor::resetState(const CpuMonitorConfig &cfg) {
 	for (int i = 0; i < portNUM_PROCESSORS; ++i) {
 		prevIdle_[i] = 0;
 		idleBaseline_[i] = 0.0f;
+		idleBaselineRatePerUs_[i] = 0.0f;
+		calibrationIdleTotal_[i] = 0;
 		lastSample_.perCore[i] = 0.0f;
 		s_idleCount[i] = 0;
 	}
@@ -104,6 +118,10 @@ bool ESPCpuMonitor::init(const CpuMonitorConfig &cfg) {
 	}
 
 	resetState(cfg);
+	measureEpoch_++;
+	if (measureEpoch_ == 0) {
+		measureEpoch_ = 1;
+	}
 
 	if (!mutex_) {
 		mutex_ = xSemaphoreCreateMutex();
@@ -280,6 +298,84 @@ std::vector<CpuUsageSample> ESPCpuMonitor::history() const {
 	return out;
 }
 
+CpuMeasureToken ESPCpuMonitor::startMeasure() const {
+	CpuMeasureToken token{};
+	if (!isInitialized()) {
+		return token;
+	}
+
+	token.valid = true;
+	token.startedUs = static_cast<uint64_t>(esp_timer_get_time());
+	token.startedCore = xPortGetCoreID();
+	for (int i = 0; i < portNUM_PROCESSORS; ++i) {
+		token.idleStart[i] = s_idleCount[i];
+	}
+
+	lock();
+	token.ownerMarker = this;
+	token.epoch = measureEpoch_;
+	token.hasCpuData = calibrated_;
+	for (int i = 0; i < portNUM_PROCESSORS; ++i) {
+		token.idleBaselineRatePerUs[i] = idleBaselineRatePerUs_[i];
+	}
+	unlock();
+
+	return token;
+}
+
+CpuMeasure ESPCpuMonitor::stopMeasure(const CpuMeasureToken &token) const {
+	CpuMeasure result{};
+	if (!isInitialized()) {
+		return result;
+	}
+	if (!token.valid || token.ownerMarker != this) {
+		return result;
+	}
+
+	lock();
+	const uint32_t currentEpoch = measureEpoch_;
+	unlock();
+	if (token.epoch != currentEpoch) {
+		return result;
+	}
+
+	result.valid = true;
+	result.startedUs = token.startedUs;
+	result.endedUs = static_cast<uint64_t>(esp_timer_get_time());
+	result.durationUs = result.endedUs >= result.startedUs ? result.endedUs - result.startedUs : 0;
+	result.durationMs = static_cast<double>(result.durationUs) / 1000.0;
+	result.durationSec = static_cast<double>(result.durationUs) / 1000000.0;
+	result.startedCore = token.startedCore;
+	result.endedCore = xPortGetCoreID();
+
+	for (int i = 0; i < portNUM_PROCESSORS; ++i) {
+		const uint64_t currentIdle = s_idleCount[i];
+		result.idleDelta[i] = currentIdle - token.idleStart[i];
+	}
+
+	if (!token.hasCpuData || result.durationUs == 0) {
+		return result;
+	}
+
+	const float durationUs = static_cast<float>(result.durationUs);
+	float usageSum = 0.0f;
+	for (int i = 0; i < portNUM_PROCESSORS; ++i) {
+		const float baselineRate = token.idleBaselineRatePerUs[i];
+		const float expectedIdle = baselineRate * durationUs;
+		if (expectedIdle <= 0.0f) {
+			return result;
+		}
+		const float idleRatio = static_cast<float>(result.idleDelta[i]) / expectedIdle;
+		const float usage = clampUsagePercent(100.0f * (1.0f - idleRatio));
+		result.perCoreUsage[i] = usage;
+		usageSum += usage;
+	}
+
+	result.hasCpuData = true;
+	result.averageUsage = usageSum / static_cast<float>(portNUM_PROCESSORS);
+	return result;
+}
+
 bool ESPCpuMonitor::sampleNow(CpuUsageSample &out) {
 	if (!isInitialized()) {
 		ESP_LOGE(TAG, "Call init() before sampleNow()");
@@ -364,6 +460,12 @@ bool ESPCpuMonitor::computeSampleLocked(CpuUsageSample &out) {
 	float perCoreUsage[portNUM_PROCESSORS] = {};
 	float avg = 0.0f;
 	uint64_t nowUs = esp_timer_get_time();
+	uint64_t deltaUs = 0;
+	if (nowUs > calibrationLastSampleUs_) {
+		deltaUs = nowUs - calibrationLastSampleUs_;
+	}
+	calibrationLastSampleUs_ = nowUs;
+	const float deltaUsFloat = static_cast<float>(deltaUs);
 
 	for (int i = 0; i < portNUM_PROCESSORS; ++i) {
 		uint64_t currentIdle = s_idleCount[i];
@@ -371,14 +473,17 @@ bool ESPCpuMonitor::computeSampleLocked(CpuUsageSample &out) {
 
 		if (!calibrated_) {
 			idleBaseline_[i] += static_cast<float>(deltaIdle);
+			calibrationIdleTotal_[i] += deltaIdle;
 		} else {
 			float baseline = idleBaseline_[i] <= 0.0f ? 1.0f : idleBaseline_[i];
-			float idleRatio = baseline > 0.0f ? static_cast<float>(deltaIdle) / baseline : 0.0f;
-			float usage = 100.0f * (1.0f - idleRatio);
-			if (usage < 0.0f)
-				usage = 0.0f;
-			if (usage > 100.0f)
-				usage = 100.0f;
+			if (idleBaselineRatePerUs_[i] > 0.0f && deltaUs > 0) {
+				const float expectedIdle = idleBaselineRatePerUs_[i] * deltaUsFloat;
+				if (expectedIdle > 0.0f) {
+					baseline = expectedIdle;
+				}
+			}
+			const float idleRatio = baseline > 0.0f ? static_cast<float>(deltaIdle) / baseline : 0.0f;
+			const float usage = clampUsagePercent(100.0f * (1.0f - idleRatio));
 			perCoreUsage[i] = usage;
 			avg += usage;
 		}
@@ -387,12 +492,24 @@ bool ESPCpuMonitor::computeSampleLocked(CpuUsageSample &out) {
 	}
 
 	if (!calibrated_) {
+		calibrationWindowUs_ += deltaUs;
 		calibrationSamplesDone_++;
 		if (calibrationSamplesDone_ >= calibrationSamplesNeeded_) {
+			const float calibrationWindowUs = static_cast<float>(calibrationWindowUs_);
+			const float fallbackWindowUs =
+			    static_cast<float>(config_.sampleIntervalMs) * 1000.0f;
 			for (int i = 0; i < portNUM_PROCESSORS; ++i) {
 				idleBaseline_[i] /= static_cast<float>(calibrationSamplesNeeded_);
 				if (idleBaseline_[i] < 1.0f) {
 					idleBaseline_[i] = 1.0f;
+				}
+				if (calibrationWindowUs > 0.0f) {
+					idleBaselineRatePerUs_[i] =
+					    static_cast<float>(calibrationIdleTotal_[i]) / calibrationWindowUs;
+				} else if (fallbackWindowUs > 0.0f) {
+					idleBaselineRatePerUs_[i] = idleBaseline_[i] / fallbackWindowUs;
+				} else {
+					idleBaselineRatePerUs_[i] = 0.0f;
 				}
 			}
 			calibrated_ = true;

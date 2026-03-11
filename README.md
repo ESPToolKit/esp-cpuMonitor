@@ -14,6 +14,7 @@ ESPCpuMonitor is a tiny C++17 helper that estimates per-core CPU usage on ESP32 
 - Optional smoothing helpers for average CPU usage (`RollingMean` or `EWMA`) so you can track baseline/trend load without forcing smoothing globally (disabled by default, fixed-size buffer when enabled).
 - Thread-safe per-sample callbacks for logging, telemetry, or UI updates; swap `enablePerCore` off to collapse cores to an overall average.
 - Manual `sampleNow()` path for users who already have their own schedulers (set `sampleIntervalMs` to `0`).
+- Token-based manual measurement API (`startMeasure()` / `stopMeasure(token)`) with precise microsecond durations and optional per-window CPU usage.
 - Optional CPU temperature readings (current + running average) using the ESP-IDF temperature sensor driver, gracefully disabled when unsupported.
 - Optional ArduinoJson export helper to stream samples over HTTP/MQTT/WebSockets alongside the rest of ESPToolKit.
 
@@ -75,6 +76,25 @@ When you set `sampleIntervalMs` to `0`, call `sampleNow()` on your monitor insta
 If temperature is enabled, `getLastTemperature(current, average)` returns the latest reading and running mean (returns `false` when unsupported or not ready).
 When your feature shuts down (task exit, OTA handoff, mode switch), call `cpuMonitor.deinit()` to release idle hooks and timer resources.
 
+Measure a specific code path:
+
+```cpp
+CpuMeasureToken token = cpuMonitor.startMeasure();
+// do work...
+CpuMeasure result = cpuMonitor.stopMeasure(token);
+
+if (result.valid) {
+    // precise timings
+    double ms = result.durationMs;
+    double sec = result.durationSec;
+
+    // CPU usage for this window (available after calibration)
+    if (result.hasCpuData) {
+        float avg = result.averageUsage;
+    }
+}
+```
+
 ## Gotchas
 - CPU usage numbers are floats in percent so you can see tiny changes; `1.0` means ~1% busy, not 100%. Feel free to round (`%.0f%%`) in your logs/UI if you prefer whole numbers.
 - Allow the calibration window (`calibrationSamples`) to finish before trusting numbers; keep the device as idle as possible during that phase.
@@ -91,6 +111,7 @@ When your feature shuts down (task exit, OTA handoff, mode switch), call `cpuMon
 - `bool getLastSample(CpuUsageSample &out) const` / `float getLastAverage() const` / `float getLastSmoothedAverage() const` – read the latest sample; average/smoothed values return `-1.0f` until ready (or when smoothing is disabled).
 - `bool getLastTemperature(float &currentC, float &averageC) const` – latest temperature and running average; returns `false` if disabled, unsupported, or not yet sampled.
 - `std::vector<CpuUsageSample> history() const` – copy of the ring buffer (size capped by `historySize`, `0` disables storage).
+- `CpuMeasureToken startMeasure() const` / `CpuMeasure stopMeasure(const CpuMeasureToken &token) const` – token-based code-path timing using `esp_timer_get_time()`. Requires `init()`. `stopMeasure()` returns `valid=false` for invalid/stale tokens. `hasCpuData` becomes true once baseline calibration is available.
 - `bool sampleNow(CpuUsageSample &out)` – immediate sampling, useful when periodic timer is disabled.
 - `void onSample(CpuSampleCallback cb)` – subscribe to every stored sample.
 - `void toJson(const CpuUsageSample&, JsonDocument &doc)` – ArduinoJson export helper (compiled only when ArduinoJson is available).
@@ -107,6 +128,7 @@ When your feature shuts down (task exit, OTA handoff, mode switch), call `cpuMon
 - `smoothingAlpha` (default `0.2`) – EWMA alpha (used when `smoothingMode = Ewma`, clamped to `(0.0, 1.0]`).
 
 `CpuUsageSample` contains `timestampUs`, `perCore[portNUM_PROCESSORS]`, `average` (%), `smoothedAverage` (%/NaN when smoothing is disabled), `temperatureC`, and `temperatureAvgC` (NaN when unsupported).
+`CpuMeasure` contains `startedUs`, `endedUs`, `durationUs`, convenience `durationMs`/`durationSec`, start/end core IDs, `idleDelta[]`, and per-window usage (`perCoreUsage[]` + `averageUsage`).
 
 ## Restrictions
 - ESP32 + FreeRTOS (Arduino-ESP32 or ESP-IDF) with `esp_freertos_hooks.h` available.

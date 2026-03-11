@@ -111,6 +111,39 @@ struct CpuUsageSample {
 	float temperatureAvgC = std::numeric_limits<float>::quiet_NaN();
 };
 
+struct CpuMeasureToken {
+	bool valid = false;
+	uint64_t startedUs = 0;
+	int startedCore = -1;
+	uint64_t idleStart[portNUM_PROCESSORS]{};
+	float idleBaselineRatePerUs[portNUM_PROCESSORS]{};
+	const void *ownerMarker = nullptr;
+	uint32_t epoch = 0;
+	bool hasCpuData = false;
+};
+
+struct CpuMeasure {
+	CpuMeasure() {
+		for (int i = 0; i < portNUM_PROCESSORS; ++i) {
+			perCoreUsage[i] = std::numeric_limits<float>::quiet_NaN();
+		}
+		averageUsage = std::numeric_limits<float>::quiet_NaN();
+	}
+
+	bool valid = false;
+	bool hasCpuData = false;
+	uint64_t startedUs = 0;
+	uint64_t endedUs = 0;
+	uint64_t durationUs = 0;
+	double durationMs = 0.0;
+	double durationSec = 0.0;
+	int startedCore = -1;
+	int endedCore = -1;
+	uint64_t idleDelta[portNUM_PROCESSORS]{};
+	float perCoreUsage[portNUM_PROCESSORS]{};
+	float averageUsage = std::numeric_limits<float>::quiet_NaN();
+};
+
 using CpuSampleCallback = std::function<void(const CpuUsageSample &)>;
 
 class ESPCpuMonitor {
@@ -135,6 +168,9 @@ class ESPCpuMonitor {
 	float getLastSmoothedAverage() const;
 	bool getLastTemperature(float &currentC, float &averageC) const;
 	std::vector<CpuUsageSample> history() const;
+
+	CpuMeasureToken startMeasure() const;
+	CpuMeasure stopMeasure(const CpuMeasureToken &token) const;
 
 	// Trigger sampling immediately (useful when sampleIntervalMs == 0)
 	bool sampleNow(CpuUsageSample &out);
@@ -170,6 +206,11 @@ class ESPCpuMonitor {
 	CpuMonitorConfig config_{};
 	uint64_t prevIdle_[portNUM_PROCESSORS];
 	float idleBaseline_[portNUM_PROCESSORS];
+	float idleBaselineRatePerUs_[portNUM_PROCESSORS];
+	uint64_t calibrationIdleTotal_[portNUM_PROCESSORS];
+	uint64_t calibrationWindowUs_ = 0;
+	uint64_t calibrationLastSampleUs_ = 0;
+	uint32_t measureEpoch_ = 0;
 	CpuUsageSample lastSample_{};
 	bool hasSample_ = false;
 	bool calibrated_ = false;

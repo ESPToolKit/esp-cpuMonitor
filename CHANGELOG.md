@@ -9,11 +9,13 @@ All notable changes to this project will be documented in this file.
 - Optional average smoothing in `CpuUsageSample` via `smoothedAverage`, with configurable `smoothingMode` (`None`, `RollingMean`, `Ewma`), rolling window size, and EWMA alpha.
 - `getLastSmoothedAverage()` helper for quickly reading the latest trend/baseline value when smoothing is enabled.
 - `CpuMonitorConfig::usePSRAMBuffers` toggle to prefer PSRAM-backed internal history and callback container/snapshot storage through `ESPBufferManager`, with automatic fallback to normal heap.
+- Token-based measurement API via `startMeasure()` / `stopMeasure(token)` with precise timing fields (`durationUs`, `durationMs`, `durationSec`) and optional per-window CPU usage in `CpuMeasure`.
 
 ### Changed
 - Removed the library-provided global `cpuMonitor`; create and manage your own `ESPCpuMonitor` instance (only one active monitor at a time) and updated examples/docs accordingly.
 - Made `ESPCpuMonitor` non-copyable/movable to prevent accidental double-free of FreeRTOS handles.
 - `toJson()` now exports `avgSmoothed` when smoothing is enabled and a smoothed sample is available.
+- Baseline calibration now tracks idle rates per microsecond so code-path measurements can estimate CPU usage across arbitrary measurement durations.
 
 ## [1.0.1] - 2025-12-03
 ### Fixed

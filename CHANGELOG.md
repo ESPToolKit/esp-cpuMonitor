@@ -17,6 +17,9 @@ All notable changes to this project will be documented in this file.
 - `toJson()` now exports `avgSmoothed` when smoothing is enabled and a smoothed sample is available.
 - Baseline calibration now tracks idle rates per microsecond so code-path measurements can estimate CPU usage across arbitrary measurement durations.
 
+### Fixed
+- CI now pins PIOArduino Core to `v6.1.19` and installs the ESP32 platform via `pio pkg install`, restoring PlatformIO compatibility with the current `platform-espressif32` package.
+
 ## [1.0.1] - 2025-12-03
 ### Fixed
 - Idle hook registration now handles the newer IDF/Arduino APIs that return `esp_err_t`, preventing false failures on startup.

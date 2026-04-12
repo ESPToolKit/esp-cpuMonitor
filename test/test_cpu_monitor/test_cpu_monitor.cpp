@@ -1,7 +1,7 @@
 #include <Arduino.h>
 #include <ESPCpuMonitor.h>
-#include <unity.h>
 #include <cmath>
+#include <unity.h>
 
 namespace {
 

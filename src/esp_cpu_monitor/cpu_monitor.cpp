@@ -50,6 +50,22 @@ static float clampUsagePercent(float usage) {
 	return usage;
 }
 
+template <typename Callback, typename... Args>
+static void invokeCpuMonitorCallback(const Callback &callback, Args... args) noexcept {
+	if (!callback) {
+		return;
+	}
+
+#if defined(__cpp_exceptions)
+	try {
+		callback(args...);
+	} catch (...) {
+	}
+#else
+	callback(args...);
+#endif
+}
+
 void ESPCpuMonitor::resetState(const CpuMonitorConfig &cfg) {
 	config_ = cfg;
 	if (!isValidSmoothingMode(config_.smoothingMode)) {
@@ -388,7 +404,7 @@ bool ESPCpuMonitor::sampleNow(CpuUsageSample &out) {
 	bool ready = captureSample(out, callbacks);
 	for (const auto &cb : callbacks) {
 		if (cb) {
-			cb(out);
+			invokeCpuMonitorCallback(cb, out);
 		}
 	}
 	return ready;
@@ -427,7 +443,7 @@ void ESPCpuMonitor::timerCallback(void *arg) {
 	if (self->captureSample(sample, callbacks)) {
 		for (const auto &cb : callbacks) {
 			if (cb) {
-				cb(sample);
+				invokeCpuMonitorCallback(cb, sample);
 			}
 		}
 	}
@@ -482,7 +498,8 @@ bool ESPCpuMonitor::computeSampleLocked(CpuUsageSample &out) {
 					baseline = expectedIdle;
 				}
 			}
-			const float idleRatio = baseline > 0.0f ? static_cast<float>(deltaIdle) / baseline : 0.0f;
+			const float idleRatio =
+			    baseline > 0.0f ? static_cast<float>(deltaIdle) / baseline : 0.0f;
 			const float usage = clampUsagePercent(100.0f * (1.0f - idleRatio));
 			perCoreUsage[i] = usage;
 			avg += usage;
@@ -496,8 +513,7 @@ bool ESPCpuMonitor::computeSampleLocked(CpuUsageSample &out) {
 		calibrationSamplesDone_++;
 		if (calibrationSamplesDone_ >= calibrationSamplesNeeded_) {
 			const float calibrationWindowUs = static_cast<float>(calibrationWindowUs_);
-			const float fallbackWindowUs =
-			    static_cast<float>(config_.sampleIntervalMs) * 1000.0f;
+			const float fallbackWindowUs = static_cast<float>(config_.sampleIntervalMs) * 1000.0f;
 			for (int i = 0; i < portNUM_PROCESSORS; ++i) {
 				idleBaseline_[i] /= static_cast<float>(calibrationSamplesNeeded_);
 				if (idleBaseline_[i] < 1.0f) {
